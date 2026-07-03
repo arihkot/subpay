@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+*.tsbuildinfo
 .env.*
 *.log
 .DS_Store
@@ -8,6 +9,7 @@ dist/
 # Contract build artifacts
 contracts/target/
 contracts/*.wasm
+contracts/test_snapshots/
 
 # Seed files (gitignored per PRD — never commit sources of synthetic activity)
 scripts/seed.ts
