@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+
+# Contract build artifacts
+contracts/target/
+contracts/*.wasm
+
+# Seed files (gitignored per PRD — never commit sources of synthetic activity)
+scripts/seed.ts
+scripts/generate-keypairs.ts
+data/seed-accounts.json
+.env.seed
+data/
+
+# Cloudflare
+.wrangler/
+frontend/wrangler.toml
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
