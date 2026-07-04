@@ -16,6 +16,12 @@ Decentralized subscription manager for recurring payments on Stellar testnet, po
 - **Payment History**: Every payment linked to on-chain tx hash with Stellar Expert links
 - **Trust-Minimized Cancellation**: Cancel anytime, unused prepaid funds refunded
 
+## Feedback Form
+https://docs.google.com/forms/d/e/1FAIpQLSdlWq1o723XapPdiOq9h1viVGqY-x-c7yRv9ntwJrZpYq7sEg/viewform?usp=publish-editor
+
+## Feedback Responses
+https://docs.google.com/spreadsheets/d/1Rk1Y8P_xq9-qSYhwaq-YUSMxRH7gw3XF-LJf1OIm2EY/edit?usp=sharing
+
 ## Tech Stack
 
 | Layer | Technology |
