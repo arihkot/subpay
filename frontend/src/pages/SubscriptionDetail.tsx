@@ -1,7 +1,15 @@
 import { useParams, Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWalletContext } from '../lib/WalletContext';
 import { CONTRACT_ID, stellarExpertTxUrl, stellarExpertContractUrl } from '../lib/contract';
+import {
+  getSubscription,
+  getPlan,
+  cancelSubscription,
+  fundVault,
+  stroopsToXlm,
+  xlmToStroops,
+} from '../lib/subpayClient';
 
 interface PaymentHistory {
   txHash: string;
@@ -10,20 +18,195 @@ interface PaymentHistory {
   status: 'claimed' | 'pending' | 'failed';
 }
 
+interface SubDetail {
+  id: number;
+  planName: string;
+  planId: number;
+  amountXlm: string;
+  periodLabel: string;
+  nextDue: number;
+  vaultBalanceXlm: string;
+  active: boolean;
+  created_at: number;
+  token: string;
+  merchant: string;
+}
+
+const DEMO_SUB: SubDetail = {
+  id: 0,
+  planName: 'Netflix',
+  planId: 0,
+  amountXlm: '1.5000000',
+  periodLabel: '30 days',
+  nextDue: Date.now() / 1000 + 86400 * 7,
+  vaultBalanceXlm: '4.5000000',
+  active: true,
+  created_at: Date.now() / 1000 - 86400 * 180,
+  token: 'n/a',
+  merchant: 'G...XYZ',
+};
+
+const DEMO_PAYMENTS: PaymentHistory[] = [
+  { txHash: 'abc123def456', amount: '1.50 XLM', timestamp: Date.now() / 1000 - 86400 * 30, status: 'claimed' },
+  { txHash: 'def789ghi012', amount: '1.50 XLM', timestamp: Date.now() / 1000 - 86400 * 60, status: 'claimed' },
+  { txHash: 'ghi345jkl678', amount: '1.50 XLM', timestamp: Date.now() / 1000 - 86400 * 90, status: 'claimed' },
+];
+
 export default function SubscriptionDetail() {
   const { id } = useParams<{ id: string }>();
-  const { connected } = useWalletContext();
-  const [payments] = useState<PaymentHistory[]>([
-    { txHash: 'abc123def456', amount: '15.00 XLM', timestamp: Date.now() / 1000 - 86400 * 30, status: 'claimed' },
-    { txHash: 'def789ghi012', amount: '15.00 XLM', timestamp: Date.now() / 1000 - 86400 * 60, status: 'claimed' },
-    { txHash: 'ghi345jkl678', amount: '15.00 XLM', timestamp: Date.now() / 1000 - 86400 * 90, status: 'claimed' },
-  ]);
+  const { connected, publicKey } = useWalletContext();
+  const [sub, setSub] = useState<SubDetail | null>(null);
+  const [payments] = useState<PaymentHistory[]>(DEMO_PAYMENTS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [showFund, setShowFund] = useState(false);
+  const [fundAmount, setFundAmount] = useState('');
+  const [fundLoading, setFundLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const fetchSub = useCallback(async () => {
+    if (!id || !publicKey) {
+      setLoading(false);
+      return;
+    }
+
+    setError(null);
+    try {
+      if (!CONTRACT_ID) {
+        setSub(DEMO_SUB);
+        setLoading(false);
+        return;
+      }
+
+      const subId = parseInt(id, 10);
+      const subData = await getSubscription(subId, publicKey);
+
+      let planName = `Plan #${subData.plan_id}`;
+      let period = 2592000;
+      let amountStroops = '';
+      let token = '';
+      let merchant = '';
+
+      try {
+        const planData = await getPlan(subData.plan_id, publicKey);
+        planName = planData.name;
+        period = planData.period;
+        amountStroops = planData.amount;
+        token = planData.token;
+        merchant = planData.merchant;
+      } catch {
+        // plan may not exist
+      }
+
+      setSub({
+        id: subData.id,
+        planName,
+        planId: subData.plan_id,
+        amountXlm: amountStroops ? stroopsToXlm(amountStroops) : '—',
+        periodLabel: period >= 2592000 ? `${period / 2592000} days` : `${period / 86400} days`,
+        nextDue: subData.next_due,
+        vaultBalanceXlm: stroopsToXlm(subData.vault_balance),
+        active: subData.active,
+        created_at: subData.created_at,
+        token,
+        merchant: merchant.slice(0, 12) + '...',
+      });
+    } catch (err) {
+      console.error('Failed to fetch subscription:', err);
+      setError('Failed to load from contract. Showing demo data.');
+      setSub(DEMO_SUB);
+    }
+    setLoading(false);
+  }, [id, publicKey]);
+
+  useEffect(() => {
+    fetchSub();
+  }, [fetchSub]);
+
+  const handleCancel = async () => {
+    if (!publicKey || !sub || !CONTRACT_ID) return;
+    setCancelling(true);
+    setActionMsg(null);
+    try {
+      const { hash } = await cancelSubscription(
+        publicKey,
+        sub.id,
+        publicKey,
+        async (xdr) => {
+          const f = window.freighterApi;
+          if (!f) throw new Error('Freighter not installed');
+          const res = await f.signTransaction(xdr, {
+            networkPassphrase: 'Test SDF Network ; September 2015',
+            accountToSign: publicKey,
+          });
+          return res.signedTxXdr;
+        },
+      );
+      setActionMsg(`Cancelled! Tx: ${hash.slice(0, 12)}...`);
+      fetchSub();
+    } catch (err) {
+      setActionMsg(`Cancel failed: ${(err as Error).message}`);
+    }
+    setCancelling(false);
+  };
+
+  const handleFund = async () => {
+    if (!publicKey || !sub || !CONTRACT_ID) return;
+    const amount = parseFloat(fundAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    setFundLoading(true);
+    setActionMsg(null);
+    try {
+      const { hash } = await fundVault(
+        publicKey,
+        sub.id,
+        xlmToStroops(amount),
+        publicKey,
+        async (xdr) => {
+          const f = window.freighterApi;
+          if (!f) throw new Error('Freighter not installed');
+          const res = await f.signTransaction(xdr, {
+            networkPassphrase: 'Test SDF Network ; September 2015',
+            accountToSign: publicKey,
+          });
+          return res.signedTxXdr;
+        },
+      );
+      setActionMsg(`Funded! Tx: ${hash.slice(0, 12)}...`);
+      setShowFund(false);
+      setFundAmount('');
+      fetchSub();
+    } catch (err) {
+      setActionMsg(`Fund failed: ${(err as Error).message}`);
+    }
+    setFundLoading(false);
+  };
 
   if (!connected) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
         <h2 className="text-2xl font-bold">Connect Your Wallet</h2>
         <p className="text-gray-400">Connect Freighter to view subscription details.</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-gray-400">Loading subscription...</p>
+      </div>
+    );
+  }
+
+  if (!sub) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+        <h2 className="text-2xl font-bold">Subscription Not Found</h2>
+        <Link to="/dashboard" className="text-stellar-400 hover:underline">
+          ← Back to Dashboard
+        </Link>
       </div>
     );
   }
@@ -36,41 +219,70 @@ export default function SubscriptionDetail() {
         ← Back to Dashboard
       </Link>
 
+      {error && (
+        <div className="bg-yellow-900/20 border border-yellow-800 rounded-xl p-4 text-sm text-yellow-400">
+          {error}
+        </div>
+      )}
+
+      {actionMsg && (
+        <div className="bg-green-900/20 border border-green-800 rounded-xl p-4 text-sm text-green-400">
+          {actionMsg}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Netflix Subscription</h1>
+          <h1 className="text-3xl font-bold">{sub.planName} Subscription</h1>
           <p className="text-gray-400 mt-1">Subscription #{id}</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors text-sm font-medium min-h-[44px]">
-            Fund Vault
-          </button>
-          <button className="px-4 py-2 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 text-sm font-medium min-h-[44px]">
-            Cancel
-          </button>
+          {sub.active && CONTRACT_ID && (
+            <button
+              onClick={() => setShowFund(true)}
+              className="px-4 py-2 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors text-sm font-medium min-h-[44px]"
+            >
+              Fund Vault
+            </button>
+          )}
+          {sub.active && CONTRACT_ID && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="px-4 py-2 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 text-sm font-medium min-h-[44px] disabled:opacity-50"
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel'}
+            </button>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <p className="text-sm text-gray-500 mb-1">Amount</p>
-          <p className="text-xl font-bold text-white">15.00 XLM</p>
-          <p className="text-xs text-gray-500">every 30 days</p>
+          <p className="text-xl font-bold text-white">{sub.amountXlm} XLM</p>
+          <p className="text-xs text-gray-500">every {sub.periodLabel}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <p className="text-sm text-gray-500 mb-1">Vault Balance</p>
-          <p className="text-xl font-bold text-white">45.00 XLM</p>
-          <p className="text-xs text-gray-500">3 payments covered</p>
+          <p className="text-xl font-bold text-white">{sub.vaultBalanceXlm} XLM</p>
+          <p className="text-xs text-gray-500">{sub.active ? 'active & funded' : 'inactive'}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <p className="text-sm text-gray-500 mb-1">Next Due</p>
-          <p className="text-xl font-bold text-white">7 days</p>
-          <p className="text-xs text-gray-500">active & funded</p>
+          <p className="text-xl font-bold text-white">
+            {sub.nextDue > Date.now() / 1000
+              ? `${Math.ceil((sub.nextDue - Date.now() / 1000) / 86400)} days`
+              : 'Overdue'}
+          </p>
+          <p className="text-xs text-gray-500">
+            {sub.active ? (sub.nextDue > Date.now() / 1000 ? 'on schedule' : 'can be claimed') : 'cancelled'}
+          </p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <p className="text-sm text-gray-500 mb-1">Total Paid</p>
-          <p className="text-xl font-bold text-stellar-400">45.00 XLM</p>
-          <p className="text-xs text-gray-500">3 payments</p>
+          <p className="text-xl font-bold text-stellar-400">—</p>
+          <p className="text-xs text-gray-500">{payments.length} recorded payments</p>
         </div>
       </div>
 
@@ -85,6 +297,9 @@ export default function SubscriptionDetail() {
           >
             {CONTRACT_ID}
           </a>
+          {sub.merchant && (
+            <p className="text-xs text-gray-500 mt-2">Merchant: <span className="font-mono">{sub.merchant}</span></p>
+          )}
         </div>
       )}
 
@@ -94,7 +309,7 @@ export default function SubscriptionDetail() {
         </div>
         {payments.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No payments yet.
+            No payments recorded yet. Fund your vault and wait for the due date.
           </div>
         ) : (
           <>
@@ -178,6 +393,45 @@ export default function SubscriptionDetail() {
           </>
         )}
       </div>
+
+      {/* Fund Modal */}
+      {showFund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <h3 className="font-semibold text-lg">Fund Vault — {sub.planName}</h3>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Amount (XLM)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                placeholder="e.g. 10"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-stellar-500 min-h-[44px]"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowFund(false);
+                  setFundAmount('');
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors text-sm min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFund}
+                disabled={fundLoading || !fundAmount}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors text-sm font-medium min-h-[44px] disabled:opacity-50"
+              >
+                {fundLoading ? 'Funding...' : 'Fund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
