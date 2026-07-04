@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.env.seed
 !frontend/.env
 *.tsbuildinfo
 *.log
@@ -10,13 +9,6 @@ dist/
 contracts/target/
 contracts/*.wasm
 contracts/test_snapshots/
-
-# Seed files (gitignored per PRD — never commit sources of synthetic activity)
-scripts/seed.ts
-scripts/generate-keypairs.ts
-data/seed-accounts.json
-.env.seed
-data/
 
 # Cloudflare
 .wrangler/

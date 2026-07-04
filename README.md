@@ -97,7 +97,7 @@ subpay/
 │       ├── pages/       # Landing, Dashboard, Plans, SubscriptionDetail
 │       ├── hooks/       # useWallet
 │       └── lib/         # contract config, WalletContext
-├── scripts/             # Deploy & seeding (gitignored)
+├── scripts/             # Deploy scripts
 ├── .github/workflows/   # CI/CD pipeline
 └── PRD.md               # Product Requirements
 ```

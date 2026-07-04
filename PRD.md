@@ -34,7 +34,6 @@ Stellar offers low fees (~0.00001 XLM base) and fast finality (~5s), ideal for m
 | 7 | CI/CD pipeline | GitHub Actions: lint → test → build → deploy on push |
 | 8 | 5+ tests each | ≥5 Soroban contract tests + ≥5 frontend tests, all passing |
 | 9 | 20+ commits | 20+ meaningful, scoped commits |
-| 10 | 55 seeded testnet users | 55 distinct accounts interacting organically; seed files gitignored |
 
 ---
 
@@ -68,7 +67,6 @@ Stellar offers low fees (~0.00001 XLM base) and fast finality (~5s), ideal for m
 - **Hosting:** Cloudflare Pages/Workers via Wrangler.
 - **CI/CD:** GitHub Actions.
 - **Testing:** Rust `#[test]` + Soroban test env for contracts; Vitest + React Testing Library for frontend.
-- **Seeding:** Node/TS script using Friendbot + generated keypairs.
 
 ---
 
@@ -188,29 +186,7 @@ Jobs:
 
 ---
 
-## 8. Testnet User Seeding (55 users) — Requirement #10
-
-**Goal:** 55 distinct testnet accounts interact with the contract in a way that looks organic (not batch-generated in one timestamp burst).
-
-**Approach** (script kept **out of git** via `.gitignore`):
-```
-scripts/seed.ts          # gitignored
-.env.seed                # gitignored (funded accounts)
-data/seed-accounts.json  # gitignored (keypairs)
-```
-
-**To avoid an "artificially seeded" look:**
-- Generate 55 keypairs; fund each via **Friendbot**.
-- **Randomize behavior per user:** vary which plans they subscribe to, vault funding amounts, number of `fund_vault` / `claim` calls, and whether some cancel.
-- **Spread timing:** insert randomized delays (jitter) between actions and across a realistic window, rather than one synchronous loop — avoids identical `created_at` clusters.
-- **Vary plan mix:** create 4–6 different plans (e.g. "Netflix-style", "Gym", "SaaS Pro", "Newsletter") with different amounts/periods so subscriptions aren't uniform.
-- Some users subscribe to multiple plans; some to one; a few cancel — creating a natural distribution.
-
-> **`.gitignore` must include** the seed script, generated keypairs, and any `.env` with funded secrets. Never commit secret keys.
-
----
-
-## 9. Commit Strategy (20+ meaningful commits)
+## 8. Commit Strategy (20+ meaningful commits)
 
 Structure commits by scope so history tells a real story:
 1. `chore: init monorepo (contracts + frontend)`
@@ -241,7 +217,7 @@ Structure commits by scope so history tells a real story:
 
 ---
 
-## 10. Deliverables Checklist
+## 9. Deliverables Checklist
 
 - [ ] Deployed contract address (`C...`) in README + UI footer
 - [ ] At least one contract-call tx hash documented + linked
@@ -251,16 +227,14 @@ Structure commits by scope so history tells a real story:
 - [ ] GitHub Actions green (lint/test/build/deploy)
 - [ ] ≥5 contract tests + ≥5 frontend tests passing
 - [ ] 20+ commits
-- [ ] 55 seeded users (files gitignored, organic distribution)
 
 ---
 
-## 11. Risks & Mitigations
+## 10. Risks & Mitigations
 
 | Risk | Mitigation |
 |------|-----------|
-| Testnet reset wipes contract/accounts | Deploy script is reproducible; re-run seeding |
+| Testnet reset wipes contract/accounts | Deploy script is reproducible |
 | Freighter not installed on user's browser | Graceful `isConnected` detection + install prompt; consider Stellar Wallets Kit for mobile |
-| Seeding looks synthetic | Randomize amounts, timing jitter, plan mix, and per-user action counts |
 | Secrets leaked in commits | Enforce `.gitignore` + pre-commit secret scan; use GitHub Secrets for CI |
 | Token for payments | Use a testnet SAC (Stellar Asset Contract) for XLM or deploy a mock token for tests |
