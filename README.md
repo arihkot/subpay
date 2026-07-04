@@ -31,6 +31,8 @@ https://drive.google.com/file/d/1Mc9xtmHC8sIsj_1uxURkfTcEYaGuTEuV/view?usp=shari
 ## Tests
 <img width="683" height="365" alt="image" src="https://github.com/user-attachments/assets/31686cc9-64c4-48fc-b3ed-2f7f37e45823" />
 
+## Pitch Deck
+https://drive.google.com/file/d/12xZ7UQlibDpvYiNCD6OzOfGS9O1mi3_t/view?usp=sharing
 
 ## Contract
 
