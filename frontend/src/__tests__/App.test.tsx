@@ -15,9 +15,10 @@ function renderWithContext(ui: ReactElement, walletOverrides = {}) {
     error: null,
     rpc: null,
     isTestnet: false,
+    connecting: false,
     connect: vi.fn(),
     disconnect: vi.fn(),
-    freighter: undefined,
+    signTx: vi.fn(),
     ...walletOverrides,
   };
 

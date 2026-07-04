@@ -54,7 +54,7 @@ const DEMO_PAYMENTS: PaymentHistory[] = [
 
 export default function SubscriptionDetail() {
   const { id } = useParams<{ id: string }>();
-  const { connected, publicKey } = useWalletContext();
+  const { connected, publicKey, signTx } = useWalletContext();
   const [sub, setSub] = useState<SubDetail | null>(null);
   const [payments] = useState<PaymentHistory[]>(DEMO_PAYMENTS);
   const [loading, setLoading] = useState(true);
@@ -133,15 +133,7 @@ export default function SubscriptionDetail() {
         publicKey,
         sub.id,
         publicKey,
-        async (xdr) => {
-          const f = window.freighterApi;
-          if (!f) throw new Error('Freighter not installed');
-          const res = await f.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return res.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Cancelled! Tx: ${hash.slice(0, 12)}...`);
       fetchSub();
@@ -163,15 +155,7 @@ export default function SubscriptionDetail() {
         sub.id,
         xlmToStroops(amount),
         publicKey,
-        async (xdr) => {
-          const f = window.freighterApi;
-          if (!f) throw new Error('Freighter not installed');
-          const res = await f.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return res.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Funded! Tx: ${hash.slice(0, 12)}...`);
       setShowFund(false);

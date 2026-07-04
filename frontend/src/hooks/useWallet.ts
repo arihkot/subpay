@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
-import { RPC_URL } from '../lib/contract';
+import {
+  isConnected,
+  getAddress,
+  getNetwork,
+  requestAccess,
+  signTransaction,
+} from '@stellar/freighter-api';
+import { RPC_URL, NETWORK_PASSPHRASE } from '../lib/contract';
 
 interface WalletState {
   connected: boolean;
@@ -8,19 +15,6 @@ interface WalletState {
   network: string;
   networkPassphrase: string;
   error: string | null;
-}
-
-declare global {
-  interface Window {
-    freighterApi?: {
-      isConnected: () => Promise<{ isConnected: boolean }>;
-      getPublicKey: () => Promise<string>;
-      getNetwork: () => Promise<string>;
-      getNetworkDetails: () => Promise<{ network: string; networkPassphrase: string }>;
-      requestAccess: () => Promise<{ error?: string }>;
-      signTransaction: (xdr: string, opts?: { networkPassphrase?: string; accountToSign?: string }) => Promise<{ signedTxXdr: string }>;
-    };
-  }
 }
 
 const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
@@ -33,35 +27,38 @@ export function useWallet() {
     networkPassphrase: '',
     error: null,
   });
+  const [connecting, setConnecting] = useState(false);
   const [rpc, setRpc] = useState<SorobanRpc.Server | null>(null);
 
-  const freighter = typeof window !== 'undefined' ? window.freighterApi : undefined;
-
   const connect = useCallback(async () => {
-    if (!freighter) {
-      setWallet((w) => ({ ...w, error: 'Freighter wallet not installed. Please install the Freighter browser extension.' }));
-      return;
-    }
+    setConnecting(true);
+    setWallet((w) => ({ ...w, error: null }));
 
     try {
-      const access = await freighter.requestAccess();
+      const access = await requestAccess();
       if (access.error) {
-        setWallet((w) => ({ ...w, error: access.error || null }));
+        setWallet((w) => ({ ...w, error: access.error }));
+        setConnecting(false);
         return;
       }
 
-      const [pubKey, network, details] = await Promise.all([
-        freighter.getPublicKey(),
-        freighter.getNetwork(),
-        freighter.getNetworkDetails(),
+      const [addrResult, netResult] = await Promise.all([
+        getAddress(),
+        getNetwork(),
       ]);
 
-      const networkPassphrase = details.networkPassphrase;
+      if (addrResult.error) {
+        setWallet((w) => ({ ...w, error: addrResult.error }));
+        setConnecting(false);
+        return;
+      }
+
+      const networkPassphrase = netResult.networkPassphrase;
 
       setWallet({
         connected: true,
-        publicKey: pubKey,
-        network,
+        publicKey: addrResult.address,
+        network: netResult.network,
         networkPassphrase,
         error: null,
       });
@@ -70,7 +67,8 @@ export function useWallet() {
     } catch (e) {
       setWallet((w) => ({ ...w, error: (e as Error).message }));
     }
-  }, [freighter]);
+    setConnecting(false);
+  }, []);
 
   const disconnect = useCallback(() => {
     setWallet({
@@ -83,24 +81,36 @@ export function useWallet() {
     setRpc(null);
   }, []);
 
+  const signTx = useCallback(async (xdr: string): Promise<string> => {
+    const result = await signTransaction(xdr, {
+      networkPassphrase: wallet.networkPassphrase || NETWORK_PASSPHRASE,
+      address: wallet.publicKey || undefined,
+    });
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    return result.signedTxXdr;
+  }, [wallet.networkPassphrase, wallet.publicKey]);
+
   const isTestnet = wallet.networkPassphrase === TESTNET_PASSPHRASE;
 
-  // Auto-check connection on mount
   useEffect(() => {
-    if (!freighter) return;
-    freighter.isConnected().then((res) => {
-      if (res.isConnected) {
+    let cancelled = false;
+    isConnected().then((res) => {
+      if (!cancelled && res.isConnected) {
         connect();
       }
     });
-  }, [freighter, connect]);
+    return () => { cancelled = true; };
+  }, [connect]);
 
   return {
     ...wallet,
     rpc,
     isTestnet,
+    connecting,
     connect,
     disconnect,
-    freighter,
+    signTx,
   };
 }

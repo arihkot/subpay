@@ -39,7 +39,7 @@ function periodToLabel(seconds: number): string {
 }
 
 export default function Plans() {
-  const { connected, isTestnet, publicKey } = useWalletContext();
+  const { connected, isTestnet, publicKey, signTx } = useWalletContext();
   const [showCreate, setShowCreate] = useState(false);
   const [plans, setPlans] = useState<PlanDisplay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,15 +115,7 @@ export default function Plans() {
         parseInt(createPeriod, 10),
         createName,
         publicKey,
-        async (xdr) => {
-          const f = window.freighterApi;
-          if (!f) throw new Error('Freighter not installed');
-          const res = await f.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return res.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Plan created! Tx: ${hash.slice(0, 12)}...`);
       setCreateName('');
@@ -147,15 +139,7 @@ export default function Plans() {
         publicKey,
         plan.id,
         publicKey,
-        async (xdr) => {
-          const f = window.freighterApi;
-          if (!f) throw new Error('Freighter not installed');
-          const res = await f.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return res.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Subscribed! Tx: ${hash.slice(0, 12)}...`);
     } catch (err) {

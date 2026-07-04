@@ -74,7 +74,7 @@ const MOCK_SUBS: SubDisplay[] = [
 ];
 
 export default function Dashboard() {
-  const { connected, isTestnet, publicKey } = useWalletContext();
+  const { connected, isTestnet, publicKey, signTx } = useWalletContext();
   const [subscriptions, setSubscriptions] = useState<SubDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,15 +167,7 @@ export default function Dashboard() {
         publicKey,
         sub.id,
         publicKey,
-        async (xdr) => {
-          const freighter = window.freighterApi;
-          if (!freighter) throw new Error('Freighter not installed');
-          const result = await freighter.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return result.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Cancelled! Tx: ${hash.slice(0, 12)}...`);
       fetchSubscriptions();
@@ -198,15 +190,7 @@ export default function Dashboard() {
         fundModal.subId,
         xlmToStroops(amount),
         publicKey,
-        async (xdr) => {
-          const freighter = window.freighterApi;
-          if (!freighter) throw new Error('Freighter not installed');
-          const result = await freighter.signTransaction(xdr, {
-            networkPassphrase: 'Test SDF Network ; September 2015',
-            accountToSign: publicKey,
-          });
-          return result.signedTxXdr;
-        },
+        signTx,
       );
       setActionMsg(`Funded! Tx: ${hash.slice(0, 12)}...`);
       setFundModal(null);

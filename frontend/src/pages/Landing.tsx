@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useWalletContext } from '../lib/WalletContext';
 
 export default function Landing() {
-  const { connected, isTestnet, connect } = useWalletContext();
+  const { connected, isTestnet, error, connecting, connect } = useWalletContext();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] text-center gap-8">
@@ -18,13 +18,20 @@ export default function Landing() {
         </p>
       </div>
 
+      {error && (
+        <div className="bg-red-900/20 border border-red-800 rounded-xl p-4 text-sm text-red-400 max-w-md">
+          {error}
+        </div>
+      )}
+
       {!connected ? (
         <div className="space-y-4">
           <button
             onClick={connect}
-            className="inline-block bg-stellar-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-stellar-500 transition-all min-h-[44px]"
+            disabled={connecting}
+            className="inline-block bg-stellar-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-stellar-500 transition-all min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Connect Freighter to Start
+            {connecting ? 'Connecting...' : 'Connect Freighter to Start'}
           </button>
           <p className="text-sm text-gray-600">
             Make sure Freighter is set to Stellar Testnet
