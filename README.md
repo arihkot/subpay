@@ -5,7 +5,9 @@ Decentralized subscription manager for recurring payments on Stellar testnet, po
 ## Contract
 
 **Network:** Stellar Testnet  
-**Contract Address:** `TODO — deploy and paste contract ID here`
+**Contract Address:** [`CAKSVSIOWRSRYHH25EMS7IZAM76HK4YAFEFXYPDA5FAQR3NV2WAIYBNR`](https://stellar.expert/explorer/testnet/contract/CAKSVSIOWRSRYHH25EMS7IZAM76HK4YAFEFXYPDA5FAQR3NV2WAIYBNR)  
+**Deploy Tx:** [`9fae148e...`](https://stellar.expert/explorer/testnet/tx/9fae148e17e3a1a0ec14249dd3892759ccf13f6130a73825691c08ba27a111)  
+**Init Tx:** [`f56294d3...`](https://stellar.expert/explorer/testnet/tx/f56294d3f9188a94d2ec0ebaee5d4dfb2f3a32fbe22060128f0fcdaea7b53512)
 
 ## Features
 
