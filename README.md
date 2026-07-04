@@ -2,6 +2,9 @@
 
 Decentralized subscription manager for recurring payments on Stellar testnet, powered by Soroban smart contracts. Authorize capped, time-bounded subscriptions and let merchants claim payments — fully on-chain and auditable.
 
+## Deployed URL
+https://subpay.pages.dev/
+
 ## Demo
 <img width="1582" height="1035" alt="Screenshot 2026-07-04 at 5 37 51 PM" src="https://github.com/user-attachments/assets/ff960ec5-69b1-43d5-9615-05bc4076771e" />
 <img width="1582" height="1035" alt="Screenshot 2026-07-04 at 5 36 48 PM" src="https://github.com/user-attachments/assets/e9cc3f80-db26-4ae8-9956-ac036303f5fe" />
@@ -21,6 +24,12 @@ Decentralized subscription manager for recurring payments on Stellar testnet, po
 
 ## Demo Video
 https://drive.google.com/file/d/1Mc9xtmHC8sIsj_1uxURkfTcEYaGuTEuV/view?usp=sharing
+
+## CI/CD
+<img width="1452" height="835" alt="image" src="https://github.com/user-attachments/assets/fe383590-6e99-4124-96af-ac066b6eb412" />
+
+## Tests
+<img width="683" height="365" alt="image" src="https://github.com/user-attachments/assets/31686cc9-64c4-48fc-b3ed-2f7f37e45823" />
 
 
 ## Contract
