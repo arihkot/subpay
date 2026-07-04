@@ -1,8 +1,8 @@
 node_modules/
 dist/
-.env
+.env.seed
+!frontend/.env
 *.tsbuildinfo
-.env.*
 *.log
 .DS_Store
 
