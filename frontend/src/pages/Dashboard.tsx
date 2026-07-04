@@ -1,67 +1,222 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useWalletContext } from '../lib/WalletContext';
-import { stellarExpertTxUrl } from '../lib/contract';
+import { CONTRACT_ID, stellarExpertTxUrl } from '../lib/contract';
+import {
+  listSubscriptions,
+  getSubscription,
+  getPlan,
+  cancelSubscription,
+  fundVault,
+  stroopsToXlm,
+  xlmToStroops,
+} from '../lib/subpayClient';
+import type { SubPayPlan, SubPaySubscription } from '../lib/subpayClient';
 
 interface SubDisplay {
-  id: string;
+  id: number;
   planName: string;
-  amount: string;
-  period: string;
+  planId: number;
+  amountStroops: string;
+  amountXlm: string;
+  periodDays: number;
   nextDue: number;
-  vaultBalance: string;
+  vaultBalanceStroops: string;
+  vaultBalanceXlm: string;
   active: boolean;
-  txHash: string;
+  token: string;
+  txHash?: string;
 }
 
+const MOCK_SUBS: SubDisplay[] = [
+  {
+    id: 0,
+    planName: 'Netflix',
+    planId: 0,
+    amountStroops: '15000000',
+    amountXlm: '1.5000000',
+    periodDays: 30,
+    nextDue: Date.now() / 1000 + 86400 * 7,
+    vaultBalanceStroops: '45000000',
+    vaultBalanceXlm: '4.5000000',
+    active: true,
+    token: 'n/a',
+    txHash: 'abc123def456',
+  },
+  {
+    id: 1,
+    planName: 'Gym Membership',
+    planId: 1,
+    amountStroops: '50000000',
+    amountXlm: '5.0000000',
+    periodDays: 30,
+    nextDue: Date.now() / 1000 + 86400 * 14,
+    vaultBalanceStroops: '100000000',
+    vaultBalanceXlm: '10.0000000',
+    active: true,
+    token: 'n/a',
+    txHash: 'def789ghi012',
+  },
+  {
+    id: 2,
+    planName: 'SaaS Pro',
+    planId: 2,
+    amountStroops: '99000000',
+    amountXlm: '9.9000000',
+    periodDays: 30,
+    nextDue: Date.now() / 1000 - 86400 * 2,
+    vaultBalanceStroops: '50000000',
+    vaultBalanceXlm: '5.0000000',
+    active: false,
+    token: 'n/a',
+    txHash: 'ghi345jkl678',
+  },
+];
+
 export default function Dashboard() {
-  const { connected, isTestnet } = useWalletContext();
+  const { connected, isTestnet, publicKey } = useWalletContext();
   const [subscriptions, setSubscriptions] = useState<SubDisplay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [fundModal, setFundModal] = useState<{ subId: number; planName: string } | null>(null);
+  const [fundAmount, setFundAmount] = useState('');
+  const [fundLoading, setFundLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!connected || !isTestnet) {
+  const fetchSubscriptions = useCallback(async () => {
+    if (!connected || !isTestnet || !publicKey) {
       setLoading(false);
       return;
     }
 
-    // In production this would query the contract. For now, show demo data.
-    const mockSubs: SubDisplay[] = [
-      {
-        id: '0',
-        planName: 'Netflix',
-        amount: '15.00 XLM',
-        period: '30 days',
-        nextDue: Date.now() / 1000 + 86400 * 7,
-        vaultBalance: '45.00 XLM',
-        active: true,
-        txHash: 'abc123def456',
-      },
-      {
-        id: '1',
-        planName: 'Gym Membership',
-        amount: '50.00 XLM',
-        period: '30 days',
-        nextDue: Date.now() / 1000 + 86400 * 14,
-        vaultBalance: '100.00 XLM',
-        active: true,
-        txHash: 'def789ghi012',
-      },
-      {
-        id: '2',
-        planName: 'SaaS Pro',
-        amount: '99.00 XLM',
-        period: '30 days',
-        nextDue: Date.now() / 1000 - 86400 * 2,
-        vaultBalance: '50.00 XLM',
-        active: false,
-        txHash: 'ghi345jkl678',
-      },
-    ];
+    setError(null);
+    try {
+      if (!CONTRACT_ID) {
+        setSubscriptions(MOCK_SUBS);
+        setLoading(false);
+        return;
+      }
 
-    setSubscriptions(mockSubs);
+      const subIds = await listSubscriptions(publicKey, publicKey);
+      const displaySubs: SubDisplay[] = [];
+
+      for (const subId of subIds) {
+        const sub: SubPaySubscription = await getSubscription(subId, publicKey);
+        let planName = `Plan #${sub.plan_id}`;
+        let period = 2592000;
+        let token = '';
+
+        try {
+          const plan: SubPayPlan = await getPlan(sub.plan_id, publicKey);
+          planName = plan.name;
+          period = plan.period;
+          token = plan.token;
+        } catch {
+          // plan may not exist anymore
+        }
+
+        displaySubs.push({
+          id: sub.id,
+          planName,
+          planId: sub.plan_id,
+          amountStroops: '',
+          amountXlm: '',
+          periodDays: Math.floor(period / 86400),
+          nextDue: sub.next_due,
+          vaultBalanceStroops: sub.vault_balance,
+          vaultBalanceXlm: stroopsToXlm(sub.vault_balance),
+          active: sub.active,
+          token,
+        });
+      }
+
+      // Get amounts from plans
+      for (const sub of displaySubs) {
+        try {
+          const plan = await getPlan(sub.planId, publicKey);
+          sub.amountStroops = plan.amount;
+          sub.amountXlm = stroopsToXlm(plan.amount);
+          sub.planName = plan.name;
+          sub.periodDays = Math.floor(plan.period / 86400);
+          sub.token = plan.token;
+        } catch {
+          // keep defaults
+        }
+      }
+
+      setSubscriptions(displaySubs);
+    } catch (err) {
+      console.error('Failed to fetch subscriptions:', err);
+      setError('Failed to load subscriptions from contract. Showing demo data.');
+      setSubscriptions(MOCK_SUBS);
+    }
     setLoading(false);
-  }, [connected, isTestnet]);
+  }, [connected, isTestnet, publicKey]);
+
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [fetchSubscriptions]);
+
+  const handleCancel = async (sub: SubDisplay) => {
+    if (!publicKey || !CONTRACT_ID) return;
+    setCancellingId(sub.id);
+    setActionMsg(null);
+    try {
+      const { hash } = await cancelSubscription(
+        publicKey,
+        sub.id,
+        publicKey,
+        async (xdr) => {
+          const freighter = window.freighterApi;
+          if (!freighter) throw new Error('Freighter not installed');
+          const result = await freighter.signTransaction(xdr, {
+            networkPassphrase: 'Test SDF Network ; September 2015',
+            accountToSign: publicKey,
+          });
+          return result.signedTxXdr;
+        },
+      );
+      setActionMsg(`Cancelled! Tx: ${hash.slice(0, 12)}...`);
+      fetchSubscriptions();
+    } catch (err) {
+      setActionMsg(`Cancel failed: ${(err as Error).message}`);
+    }
+    setCancellingId(null);
+  };
+
+  const handleFund = async () => {
+    if (!publicKey || !fundModal || !CONTRACT_ID) return;
+    const amount = parseFloat(fundAmount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    setFundLoading(true);
+    setActionMsg(null);
+    try {
+      const { hash } = await fundVault(
+        publicKey,
+        fundModal.subId,
+        xlmToStroops(amount),
+        publicKey,
+        async (xdr) => {
+          const freighter = window.freighterApi;
+          if (!freighter) throw new Error('Freighter not installed');
+          const result = await freighter.signTransaction(xdr, {
+            networkPassphrase: 'Test SDF Network ; September 2015',
+            accountToSign: publicKey,
+          });
+          return result.signedTxXdr;
+        },
+      );
+      setActionMsg(`Funded! Tx: ${hash.slice(0, 12)}...`);
+      setFundModal(null);
+      setFundAmount('');
+      fetchSubscriptions();
+    } catch (err) {
+      setActionMsg(`Fund failed: ${(err as Error).message}`);
+    }
+    setFundLoading(false);
+  };
 
   if (!connected) {
     return (
@@ -84,7 +239,10 @@ export default function Dashboard() {
   }
 
   const activeSubs = subscriptions.filter((s) => s.active);
-  const totalSpend = subscriptions.reduce((acc, s) => acc + parseFloat(s.amount), 0);
+  const totalSpend = subscriptions.reduce(
+    (acc, s) => acc + parseFloat(s.amountXlm || '0'),
+    0,
+  );
 
   if (loading) {
     return (
@@ -101,6 +259,18 @@ export default function Dashboard() {
         <p className="text-gray-400 mt-1">Manage your recurring payments</p>
       </div>
 
+      {error && (
+        <div className="bg-yellow-900/20 border border-yellow-800 rounded-xl p-4 text-sm text-yellow-400">
+          {error}
+        </div>
+      )}
+
+      {actionMsg && (
+        <div className="bg-green-900/20 border border-green-800 rounded-xl p-4 text-sm text-green-400">
+          {actionMsg}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <p className="text-sm text-gray-500 mb-1">Active Subscriptions</p>
@@ -114,7 +284,7 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500 mb-1">Next Payment Due</p>
           <p className="text-3xl font-bold text-white">
             {activeSubs.length > 0
-              ? `${Math.ceil((activeSubs[0].nextDue - Date.now() / 1000) / 86400)}d`
+              ? `${Math.ceil(Math.max(0, (activeSubs[0].nextDue - Date.now() / 1000) / 86400))}d`
               : '—'}
           </p>
         </div>
@@ -154,13 +324,13 @@ export default function Dashboard() {
                           {sub.planName}
                         </Link>
                       </td>
-                      <td className="p-4 text-sm">{sub.amount}</td>
+                      <td className="p-4 text-sm">{sub.amountXlm || '—'} XLM</td>
                       <td className="p-4 text-sm">
                         {sub.nextDue > Date.now() / 1000
                           ? `${Math.ceil((sub.nextDue - Date.now() / 1000) / 86400)} days`
                           : 'Overdue'}
                       </td>
-                      <td className="p-4 text-sm">{sub.vaultBalance}</td>
+                      <td className="p-4 text-sm">{sub.vaultBalanceXlm || '0'} XLM</td>
                       <td className="p-4">
                         <span
                           className={`text-xs px-2 py-1 rounded-full ${
@@ -174,24 +344,33 @@ export default function Dashboard() {
                       </td>
                       <td className="p-4">
                         <div className="flex gap-2">
-                          {sub.active && (
-                            <button className="text-xs px-3 py-1.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors min-h-[44px] min-w-[44px]">
+                          {sub.active && CONTRACT_ID && (
+                            <button
+                              onClick={() => setFundModal({ subId: sub.id, planName: sub.planName })}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors min-h-[44px] min-w-[44px]"
+                            >
                               Fund
                             </button>
                           )}
-                          {sub.active && (
-                            <button className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 min-h-[44px] min-w-[44px]">
-                              Cancel
+                          {sub.active && CONTRACT_ID && (
+                            <button
+                              onClick={() => handleCancel(sub)}
+                              disabled={cancellingId === sub.id}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 min-h-[44px] min-w-[44px] disabled:opacity-50"
+                            >
+                              {cancellingId === sub.id ? '...' : 'Cancel'}
                             </button>
                           )}
-                          <a
-                            href={stellarExpertTxUrl(sub.txHash)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors border border-gray-700 min-h-[44px] min-w-[44px] flex items-center"
-                          >
-                            Tx ↗
-                          </a>
+                          {sub.txHash && (
+                            <a
+                              href={stellarExpertTxUrl(sub.txHash)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors border border-gray-700 min-h-[44px] min-w-[44px] flex items-center"
+                            >
+                              {sub.txHash.length > 15 ? 'Tx' : ''} ↗
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -221,11 +400,11 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="text-gray-500">Amount:</span>{' '}
-                      <span className="text-white">{sub.amount}</span>
+                      <span className="text-white">{sub.amountXlm || '—'} XLM</span>
                     </div>
                     <div>
                       <span className="text-gray-500">Vault:</span>{' '}
-                      <span className="text-white">{sub.vaultBalance}</span>
+                      <span className="text-white">{sub.vaultBalanceXlm || '0'} XLM</span>
                     </div>
                     <div>
                       <span className="text-gray-500">Next Due:</span>{' '}
@@ -237,24 +416,33 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {sub.active && (
-                      <button className="text-xs px-3 py-1.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors min-h-[44px] min-w-[44px]">
+                    {sub.active && CONTRACT_ID && (
+                      <button
+                        onClick={() => setFundModal({ subId: sub.id, planName: sub.planName })}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors min-h-[44px] min-w-[44px]"
+                      >
                         Fund
                       </button>
                     )}
-                    {sub.active && (
-                      <button className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 min-h-[44px] min-w-[44px]">
-                        Cancel
+                    {sub.active && CONTRACT_ID && (
+                      <button
+                        onClick={() => handleCancel(sub)}
+                        disabled={cancellingId === sub.id}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-900/70 transition-colors border border-red-800 min-h-[44px] min-w-[44px] disabled:opacity-50"
+                      >
+                        {cancellingId === sub.id ? '...' : 'Cancel'}
                       </button>
                     )}
-                    <a
-                      href={stellarExpertTxUrl(sub.txHash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors border border-gray-700 min-h-[44px] min-w-[44px] inline-flex items-center"
-                    >
-                      Tx ↗
-                    </a>
+                    {sub.txHash && (
+                      <a
+                        href={stellarExpertTxUrl(sub.txHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors border border-gray-700 min-h-[44px] min-w-[44px] inline-flex items-center"
+                      >
+                        Tx ↗
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}
@@ -262,6 +450,45 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      {/* Fund Modal */}
+      {fundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4">
+            <h3 className="font-semibold text-lg">Fund Vault — {fundModal.planName}</h3>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Amount (XLM)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                placeholder="e.g. 10"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-stellar-500 min-h-[44px]"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setFundModal(null);
+                  setFundAmount('');
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors text-sm min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFund}
+                disabled={fundLoading || !fundAmount}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-stellar-600 text-white hover:bg-stellar-500 transition-colors text-sm font-medium min-h-[44px] disabled:opacity-50"
+              >
+                {fundLoading ? 'Funding...' : 'Fund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
