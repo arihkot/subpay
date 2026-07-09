@@ -26,7 +26,7 @@ https://subpay.pages.dev/
 https://drive.google.com/file/d/1Mc9xtmHC8sIsj_1uxURkfTcEYaGuTEuV/view?usp=sharing
 
 ## CI/CD
-<img width="1452" height="835" alt="image" src="https://github.com/user-attachments/assets/fe383590-6e99-4124-96af-ac066b6eb412" />
+<img width="1452" height="801" alt="image" src="https://github.com/user-attachments/assets/176e2c97-4664-4b05-bbef-21fbb74cfe0f" />
 
 ## Tests
 <img width="683" height="365" alt="image" src="https://github.com/user-attachments/assets/31686cc9-64c4-48fc-b3ed-2f7f37e45823" />
