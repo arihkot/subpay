@@ -17,9 +17,9 @@ fn mint_tokens(e: &Env, token: &Address, _admin: &Address, to: &Address, amount:
 }
 
 fn setup_contract(env: &Env) -> (SubPayClient<'_>, Address, Address) {
-    let admin = Address::generate(&env);
+    let admin = Address::generate(env);
     let contract_id = env.register(SubPay, ());
-    let client = SubPayClient::new(&env, &contract_id);
+    let client = SubPayClient::new(env, &contract_id);
     client.initialize(&admin);
     (client, contract_id, admin)
 }
